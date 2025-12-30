@@ -1,0 +1,5 @@
+# Python 3.9 (Recommended for RPi OS Bullseye/Bookworm legacy)
+
+tflite-runtime>=2.5.0
+opencv-python
+numpy

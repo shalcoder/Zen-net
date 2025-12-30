@@ -1,0 +1,7 @@
+# Python 3.9 Required
+# We experienced compatibility issues with newer NumPy/TensorFlow versions.
+# Strictly use these versions for stability.
+
+tensorflow==2.15.0
+numpy==1.26.4
+opencv-python
