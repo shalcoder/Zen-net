@@ -191,6 +191,7 @@ def main():
         # Calculate FPS
         end_time = time.time()
         fps = 1 / (end_time - start_time)
+        height, width, _ = frame.shape
         cv2.putText(frame, f"FPS: {fps:.1f}", (10, height - 10), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
 
