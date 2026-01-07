@@ -22,7 +22,7 @@ from email.mime.text import MIMEText
 
 EMAIL_SENDER = os.environ.get("EMAIL_SENDER", "vishalm26012006@gmail.com")
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "your_app_password")
-EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "vaishak.2327@gmail.com")
+EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "vishal.2006dev@gmail.com")
 
 def send_email_alert(risk_score: float):
     """Send emergency email alert using Gmail SMTP"""
@@ -49,7 +49,9 @@ def send_email_alert(risk_score: float):
     msg['To'] = EMAIL_RECEIVER
 
     try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+        # Use Port 587 with STARTTLS (More reliable than 465)
+        with smtplib.SMTP('smtp.gmail.com', 587, timeout=10) as server:
+            server.starttls() # Upgrade connection to secure
             server.login(EMAIL_SENDER, EMAIL_PASSWORD)
             server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER, msg.as_string())
         print(f"SUCCESS: Email Alert Sent to {EMAIL_RECEIVER}!")
