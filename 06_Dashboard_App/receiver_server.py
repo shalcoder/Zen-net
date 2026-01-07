@@ -119,12 +119,15 @@ def upload_cam(data: CamTelemetry, db: Session = Depends(get_db)):
     ).first()
 
     verified_fall = False
-    if data.vision_status == "Fall":
+    if data.posture_class == "FALLING":
         # Dual Verification Logic
         if recent_impact:
             verified_fall = True
             print(f"CONFIRMED FALL: Vision + Wearable Impact ({recent_impact.accel_magnitude:.2f}g)")
+            
+            # Send BOTH alerts
             send_blynk_alert(f"EMERGENCY: Confirmed Fall! Risk: {data.risk_score:.1f}%")
+            send_email_alert(data.risk_score)
         else:
              print(f"Vision Fall detected, but no wearable impact found. Alert suppressed.")
 
