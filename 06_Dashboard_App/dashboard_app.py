@@ -251,31 +251,34 @@ if df.empty:
     st.warning("No data found in database. Please ensure your ESP32 and Raspberry Pi are sending data to the Render backend URL shown in the sidebar.")
     st.stop()
     # --- LOGIC SEPARATION: Multi-Modal Stream Handling ---
-    # We must treat Vision (RPi) and Wearable (ESP32) as separate independent streams
-    
-    # 1. Filter streams
     df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
     current_time = pd.Timestamp.now(tz='UTC')
     
-    # Get latest from Webcam Node
+    # 1. Filter streams
     cam_df = df[df['device_id'].str.contains("RPI", case=False, na=False)]
+    wear_df = df[df['device_id'].str.contains("ESP32", case=False, na=False)]
+
+    # 2. Activity status (Relaxed to 5 minutes for testing)
+    cam_active = False
+    latest_cam = None
     if not cam_df.empty:
         latest_cam = cam_df.iloc[0]
-        time_diff = (current_time - latest_cam['timestamp']).total_seconds()
-        cam_active = time_diff < 10  # Active if msg in last 10s
-    else:
-        latest_cam = None
-        cam_active = False
+        cam_active = (current_time - latest_cam['timestamp']).total_seconds() < 300
 
-    # Get latest from Wearable Node
-    wear_df = df[df['device_id'].str.contains("ESP32", case=False, na=False)]
+    wear_active = False
+    latest_wear = None
     if not wear_df.empty:
         latest_wear = wear_df.iloc[0]
-        time_diff = (current_time - latest_wear['timestamp']).total_seconds()
-        wear_active = time_diff < 10
-    else:
-        latest_wear = None
-        wear_active = False
+        wear_active = (current_time - latest_wear['timestamp']).total_seconds() < 300
+
+    # 3. Add Debug Info to Sidebar
+    with st.sidebar:
+        st.divider()
+        st.markdown("### 🔍 Live API Debug")
+        st.write(f"Total Records: {len(df)}")
+        st.write(f"Last Sync: {current_time.strftime('%H:%M:%S')} UTC")
+        if not df.empty:
+            st.write(f"Latest ID: {df.iloc[0]['id']}")
 
     # --- FUSION ENGINE (Dashboard Side) ---
     is_vision_fall = False
