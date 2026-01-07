@@ -25,8 +25,22 @@ class UserTelemetry(Base):
     vision_status = Column(String) # Normal, Fall
     alert_status = Column(String) # NORMAL, WARNING, CRITICAL
 
-# Setup
-engine = create_engine(DB_URL, connect_args={"check_same_thread": False})
+# Database Configuration
+SUPABASE_URL = "postgresql://postgres:hello_world%40123@ZenNet.ai.supabase.co:5432/postgres"
+
+try:
+    # Try connecting to Supabase (Cloud)
+    engine = create_engine(SUPABASE_URL, pool_pre_ping=True)
+    with engine.connect() as conn:
+        pass
+    print("✅ Connected to Supabase Cloud Database")
+except Exception as e:
+    # Fallback to local SQLite if cloud is unreachable
+    print(f"⚠️ Cloud DB Unreachable: {e}")
+    print("📁 Falling back to local SQLite database")
+    DB_URL = "sqlite:///./guardian_system_v2.db"
+    engine = create_engine(DB_URL, connect_args={"check_same_thread": False})
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():
