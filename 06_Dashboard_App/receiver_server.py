@@ -9,12 +9,50 @@ import os
 from database.db_manager import SessionLocal, UserTelemetry, init_db
 from analytics.fatigue_logic import FatigueComputer
 
-# Blynk Configuration (from environment variables)
+# --- BLYNK CONFIGURATION ---
 BLYNK_TEMPLATE_ID = os.getenv("BLYNK_TEMPLATE_ID", "TMPL3Q_roROB9")
 BLYNK_TEMPLATE_NAME = os.getenv("BLYNK_TEMPLATE_NAME", "Elderly Care EdgeAI")
 BLYNK_AUTH_TOKEN = os.getenv("BLYNK_AUTH_TOKEN", "eGCQr0mI4f416sHgYr7b55TzdthN-Ru9")
 BLYNK_DEVICE_NAME = os.getenv("BLYNK_DEVICE_NAME", "ESPCAM_node")
 BLYNK_EVENT_CODE = os.getenv("BLYNK_EVENT_CODE", "fall_alert")
+
+# --- EMAIL CONFIGURATION (Gmail SMTP) ---
+import smtplib
+from email.mime.text import MIMEText
+
+EMAIL_SENDER = os.environ.get("EMAIL_SENDER", "vishalm26012006@gmail.com")
+EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "your_app_password")
+EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "vaishak.2327@gmail.com")
+
+def send_email_alert(risk_score: float):
+    """Send emergency email alert using Gmail SMTP"""
+    if "your_email" in EMAIL_SENDER or "your_app_password" in EMAIL_PASSWORD:
+        print("Email not configured properly. Skipping.")
+        return
+
+    subject = f"🚨 EMERGENCY: Fall Detected! Risk {risk_score:.1f}%"
+    body = f"""
+    Guardian AI Alert System
+    ------------------------
+    EVENT: Verified Fall Detected
+    RISK LEVEL: {risk_score:.1f}%
+    STATUS: Confirmed by Vision + Wearable Sensors
+    
+    Please check the dashboard immediately.
+    """
+    
+    msg = MIMEText(body)
+    msg['Subject'] = subject
+    msg['From'] = EMAIL_SENDER
+    msg['To'] = EMAIL_RECEIVER
+
+    try:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER, msg.as_string())
+        print("Email Alert Sent!")
+    except Exception as e:
+        print(f"Email failed: {e}")
 
 def send_blynk_alert(message: str):
     """Send fall alert via Blynk cloud"""
