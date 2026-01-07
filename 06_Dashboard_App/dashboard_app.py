@@ -258,27 +258,23 @@ if df.empty:
     cam_df = df[df['device_id'].str.contains("RPI", case=False, na=False)]
     wear_df = df[df['device_id'].str.contains("ESP32", case=False, na=False)]
 
-    # 2. Activity status (Relaxed to 5 minutes for testing)
-    cam_active = False
-    latest_cam = None
-    if not cam_df.empty:
-        latest_cam = cam_df.iloc[0]
-        cam_active = (current_time - latest_cam['timestamp']).total_seconds() < 300
+    # 2. Activity status (DISABLED TIMEOUT FOR DEBUGGING)
+    # We will show the latest data even if it's "stale" to ensure the UI renders
+    cam_active = not cam_df.empty
+    latest_cam = cam_df.iloc[0] if cam_active else None
 
-    wear_active = False
-    latest_wear = None
-    if not wear_df.empty:
-        latest_wear = wear_df.iloc[0]
-        wear_active = (current_time - latest_wear['timestamp']).total_seconds() < 300
+    wear_active = not wear_df.empty
+    latest_wear = wear_df.iloc[0] if wear_active else None
 
     # 3. Add Debug Info to Sidebar
     with st.sidebar:
         st.divider()
         st.markdown("### 🔍 Live API Debug")
         st.write(f"Total Records: {len(df)}")
-        st.write(f"Last Sync: {current_time.strftime('%H:%M:%S')} UTC")
-        if not df.empty:
-            st.write(f"Latest ID: {df.iloc[0]['id']}")
+        st.write(f"Current UTC: {current_time.strftime('%H:%M:%S')}")
+        if wear_active:
+            st.write(f"Wearable Time: {latest_wear['timestamp'].strftime('%H:%M:%S')}")
+            st.write(f"Delay: {int((current_time - latest_wear['timestamp']).total_seconds()/60)} mins")
 
     # --- FUSION ENGINE (Dashboard Side) ---
     is_vision_fall = False
