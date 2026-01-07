@@ -1,189 +1,239 @@
-
+import numpy as np 
 import cv2
-import numpy as np
-import time
-import requests
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import time 
+import math 
+import tensorflow as tf 
+import requests 
+   
 
-# --- CONFIGURATION ---
-BLYNK_AUTH = "YOUR_BLYNK_AUTH_TOKEN"
-BLYNK_URL = f"https://blynk.cloud/external/api/update?token={BLYNK_AUTH}"
+STREAMLIT_URL = "http://10.211.186.135:8000/upload_telemetry"
 
-# TFLite Settings
-MODEL_PATH = "model.tflite" # Ensure this file is present
-THRESHOLD = 0.3
 
-# Wellness Tracking
-MAX_SITTING_TIME_SEC = 3600 # 1 Hour
-current_sitting_start = None
+MODEL_PATH = "/home/vamshi/Mangal/movenet_singlepose_lightning_int8.tflite"
+INPUT_SIZE = 192
+CONFIDENCE_THRESHOLD = 0.3
 
-# IoT State
-wearable_triggered = False
-wearable_last_heartbeat = time.time()
-camera_active_until = 0
+SKELETON_COLOR = (0,255,0)
 
-# --- HTTP SERVER (To receive Trigger from ESP32 Wearable) ---
-class RequestHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        global wearable_triggered, wearable_last_heartbeat, camera_active_until
-        
-        if self.path == '/trigger_fall':
-            print("[IOT] WEARABLE DETECTED IMPACT! Verifying with Vision...")
-            wearable_triggered = True
-            camera_active_until = time.time() + 15 # Activate Camera for 15s verification
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b"VERIFYING")
-            
-        elif self.path == '/heartbeat':
-            wearable_last_heartbeat = time.time()
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b"OK")
+PROCESS_EVERY_N_FRAME = 2
+movement_history = []
+HISTORY_WINDOW = 30
+MAX_JUMP_THRESHOLD = 0.15
 
-def start_server():
-    server = HTTPServer(('0.0.0.0', 5000), RequestHandler)
-    server.serve_forever()
+last_centroid = None
 
-# --- BLYNK ALERTS ---
-def send_alert(message, pin="v1"):
+EDGES = [
+    (0,1),(0,2),(1,3),(2,4),(0,5),(0,6),
+    (5,7),(7,9),(6,8),(8,10),(5,6),
+    (5,11),(6,12),(11,12),(11,13),(13,15),
+    (12,14),(14,16)
+]
+
+def send_predicitons(posture, conf):
+    vision_status = "Normal"  # Fixed: was "NORMAL"
+    if posture == "FALLING":
+        vision_status = "Fall"  # Fixed: was "FALL"
+    
+    payload = {
+        "device_id": "RPI_CAM_01",
+        "posture_class": posture,  # ✅ Fixed typo: was "posture_cass"
+        "accel_magnitude": 1.0,
+        "slump_metric": 0.0,
+        "vision_status": vision_status,
+        "risk_score": conf * 100        
+    }
     try:
-        url = f"{BLYNK_URL}&{pin}={message}"
-        requests.get(url, timeout=2)
-        print(f"[CLOUD] Alert Sent: {message}")
-    except:
-        print("[CLOUD] Failed to send alert (Check Internet)")
+        requests.post(STREAMLIT_URL, json=payload, timeout=0.2)
+        print(f"✅ Sent: {posture}")
+    except Exception as e:
+        print(f"❌ Error: {e}")
 
-# --- MOVENET UTILS (Simplified for brevity) ---
-# TFLite Runtime Import
-try:
-    import tflite_runtime.interpreter as tflite
-except ImportError:
-    try:
-        import tensorflow.lite as tflite
-    except ImportError:
-        print("Error: Install tflite-runtime")
-        exit(1)
 
-# Edges for skeleton (Same as before)
-EDGES = { (0, 1): "m", (0, 2): "c", (1, 3): "m", (2, 4): "c", (0, 5): "m", (0, 6): "c", (5, 7): "m", (7, 9): "m", (6, 8): "c", (8, 10): "c", (5, 6): "y", (5, 11): "m", (6, 12): "c", (11, 12): "y", (11, 13): "m", (13, 15): "m", (12, 14): "c", (14, 16): "c" }
-
-def main():
-    global current_sitting_start
+def get_bounding_box(keypoints, height, width):
+    valid_points = keypoints[keypoints[:,2]>CONFIDENCE_THRESHOLD]
+    if len(valid_points)==0:
+        return None
     
-    # 1. Start IoT Listener
-    t = threading.Thread(target=start_server)
-    t.daemon = True
-    t.start()
-    print("✅ IoT Server Started on Port 5000")
+    y_coords = valid_points[:,0]*height
+    x_coords = valid_points[:,1]*width
+    return {
+        'x1':x_coords.min(),'y1':y_coords.min(),
+        'x2':x_coords.max(),'y2':y_coords.max()
+    }
+
+def draw_skeleton(frame, keypoints):
+    height, width = frame.shape[:2]
+
+    kpts = keypoints[0,0]*[height, width, 1]
+
+    for edge in EDGES:
+        if kpts[edge[0],2]>CONFIDENCE_THRESHOLD and kpts[edge[1],2]>CONFIDENCE_THRESHOLD:
+            pt1 = (int(kpts[edge[0],1]), int(kpts[edge[0],0]))
+            pt2 = (int(kpts[edge[1],1]), int(kpts[edge[1],1]))
+
+            cv2.line(frame, pt1, pt2, SKELETON_COLOR, 2, cv2.LINE_AA)
+
+    for i in range(17):
+        if kpts[i,2] > CONFIDENCE_THRESHOLD:
+            x,y = int(kpts[i,1]), int(kpts[i,0])
+            cv2.circle(frame, (x,y), 4, (0,0,255),-1)
+            cv2.circle(frame, (x,y), 6, (255,255,255),2)
+
+
+def detect_posture(keypoints, height, width):
+    global movement_history, last_centroid
+
+    nose = keypoints[0]
+    l_sh, r_sh = keypoints[5], keypoints[6]
+    l_hip, r_hip = keypoints[11], keypoints[12]
+    l_knee, r_knee = keypoints[13], keypoints[14]
+    l_ank, r_ank = keypoints[15], keypoints[16]
+
+    def to_px(pt):
+        return (pt[1]*width, pt[0]*height, pt[2])
     
-    # 2. Load Model
-    interpreter = tflite.Interpreter(model_path=MODEL_PATH)
-    input_details = interpreter.get_input_details()
-    output_details = interpreter.get_output_details()
-    input_index = input_details[0]['index']
-    output_index = output_details[0]['index']
-    interpreter.resize_tensor_input(input_index, [1, 160, 320, 3])
-    interpreter.allocate_tensors()
-    print("✅ MoveNet AI Model Loaded")
+    n = to_px(nose)
+    sh = to_px(((l_sh[0]+r_sh[0])/2,(l_sh[1]+r_sh[1])/2,1))
+    hip = to_px(((l_hip[0]+r_hip[0])/2,(l_hip[1]+r_hip[[2]])/2,1))
+    knee_l, knee_r = to_px(l_knee), to_px(r_knee)
+    ank_l, ank_r = to_px(l_ank), to_px(r_ank)
 
-    # 3. Open Camera
-    cap = cv2.VideoCapture(0) # USB Cam
+    def angle(a,b,c):
+        a,b,c = np.array(a[:2]), np.array(b[:2]), np.array(c[:2])
+        ba, bc = a-b, c-b
+        cosang = np.dot(ba,bc)/(np.linalg.norm(ba)*np.linalg.norm(bc)+1e-6)
+        return np.degrees(np.arccos(np.clip(cosang,-1,1)))
+
+    torso_angle = abs(math.degrees(math.atan2(sh[1]-hip[1],sh[0]-hip[0])))
+
+    knee_angle = min(angle(knee_l, hip, ank_l), angle(knee_r, hip, ank_r))
+
     
-    print("🚀 System Armed. Waiting for Wearable Trigger or Wellness Checks...")
+    cx, cy = hip[0], hip[1]
+    movement_history.append((cx,cy))
+    if len(movement_history)>HISTORY_WINDOW:
+        movement_history.pop(0)
     
-    while True:
-        # --- HEALTH CHECK (Self-Healing) ---
-        if time.time() - wearable_last_heartbeat > 60:
-            print("⚠️ WARNING: Wearable Sensor Offline!")
-            send_alert("SENSOR_OFFLINE", "v10")
-            wearable_last_heartbeat = time.time() # Reset to avoid spam
-
-        # --- LOGIC SWITCHER ---
-        # Only run heavy AI if triggered OR periodically (every 5 seconds) for Wellness check
-        # This saves Huge Energy (Green IoT)
-        
-        should_run_ai = False
-        if time.time() < camera_active_until:
-            should_run_ai = True # Emergency Mode
-        elif int(time.time()) % 5 == 0:
-            should_run_ai = True # Periodic Wellness Check
-            
-        if not should_run_ai:
-             time.sleep(0.1)
-             continue
-
-        ret, frame = cap.read()
-        if not ret: break
-
-        # AI Inference
-        img = cv2.resize(frame, (320, 160))
-        input_data = np.expand_dims(img, axis=0)
-        
-        # Type handling
-        if input_details[0]['dtype'] == np.uint8:
-             input_data = input_data.astype(np.uint8)
+    motion = np.std([p[0] for p in movement_history]) + np.std([p[1] for p in movement_history])
+    
+    if n[1] > hip[1] + 20 or torso_angle < 35 or n[1] > height*0.8:
+        if motion > 40:
+            return "FALL", (0,0,255)
         else:
-             input_data = input_data.astype(np.float32)
-
-        interpreter.set_tensor(input_index, input_data)
-        interpreter.invoke()
-        keypoints = interpreter.get_tensor(output_index)
-        keypoints = keypoints[:, :, :51].reshape(6, 17, 3)[0] # First person
+            return "LYING",(0,165,255)
+    
+    if knee_angle < 120 and hip[1] > sh[1] - 10:
+        return "SITTING", (255,165,0)
+    
+    if torso_angle > 50 and hip[1] < knee_l[1] and hip[1] < knee_r[1]:
+        return "STANDING", (0,255,0)
+    
+    return "UNKNOWN", (200,200,200)
         
-        # Posture Analysis (Simplified)
-        posture = "STANDING"
-        conf = np.mean(keypoints[:, 2])
-        
-        if conf > 0.3:
-            y_coords = keypoints[:, 0]
-            aspect_ratio = (np.max(keypoints[:, 1]) - np.min(keypoints[:, 1])) / (np.max(y_coords) - np.min(y_coords))
-            
-            if aspect_ratio > 1.5: 
-                posture = "Recumbent (Lying)" 
-            elif aspect_ratio > 0.8:
-                posture = "SITTING"
-            
-            # --- EMERGENCY LOGIC ---
-            if posture == "Recumbent (Lying)" or posture == "FALLING":
-                 # Dual Verification: Did wearable trigger AND camera see it?
-                 if time.time() < camera_active_until:
-                      print("🚨 CONFIRMED FALL! Sending Emergency Alert!")
-                      send_alert("EMERGENCY_FALL_CONFIRMED")
-                      camera_active_until = 0 # Reset
-                 else:
-                      print("Visual Lying detected (No impact trigger) -> Assuming Rest.")
-            
-            # --- WELLNESS LOGIC (Fatigue & Slump) ---
-            if posture == "SITTING":
-                # Slump Detection: Check distance between Nose (0) and avg Shoulders (5,6)
-                nose_y = keypoints[0][0]
-                shoulder_y = (keypoints[5][0] + keypoints[6][0]) / 2
-                
-                # In normalized coords (0-1), a small diff means head is down
-                neck_length = abs(shoulder_y - nose_y)
-                
-                # Threshold dependent on distance, but usually < 0.05 means head is dropped
-                if neck_length < 0.05: 
-                     print("💤 FATIGUE: Slumping detected (Head Drop)")
-                     send_alert("FATIGUE_SLUMP_DETECTED", "v6")
-                     posture = "FATIGUE (SLUMP)"
+def main():
+    print('='*60)
+    print("MoveNet Single Pose Detection + Posture Recognition")
+    print('='*60)
 
-                if current_sitting_start is None: current_sitting_start = time.time()
-                elif time.time() - current_sitting_start > MAX_SITTING_TIME_SEC: 
-                    print("💤 FATIGUE ALERT: User sitting too long.")
-                    send_alert("FATIGUE_WARNING_MOVE_AROUND", "v5")
-                    current_sitting_start = None # Reset
+    print("\n[1/3] Loading model...")
+    try:
+        interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
+        interpreter.allocate_tensors()
+        input_details = interpreter.get_input_details()
+        print(input_details)
+        output_details =interpreter.get_output_details()
+        print(output_details)
+        print("Model Loaded")
+    except Exception as e:
+        print(f"Error:{e}")
+        return
+    
+    print("\n [2/3] Opening Camera...")
+    cap = cv2.VideoCapture(0)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH,640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT,480)
+    print("Camera Ready")
+
+
+    print("[3/3 Starting Detection ....")
+
+
+    frame_count = 0
+    last_keypoint = None
+    fps_history = []
+    prev_time = time.time()
+
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frame_count+=1
+
+            if frame_count%PROCESS_EVERY_N_FRAME==0 or last_keypoint is None:
+                img = cv2.resize(frame, (INPUT_SIZE, INPUT_SIZE))
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+                input_data = np.expand_dims(img, axis=0).astype(np.uint8)
+
+                interpreter.set_tensor(input_details[0]['index'],input_data)
+                interpreter.invoke()
+
+                keypoints = interpreter.get_tensor(output_details[0]['index'])
+                last_keypoint = keypoints
             else:
-                current_sitting_start = None
+                draw_skeleton(frame, keypoints)
+                posture, color = detect_posture(
+                            keypoints[0,0],
+                            frame.shape[0],
+                            frame.shape[1])   
+                
+                conf = 0.15
+                send_predicitons(posture, conf)
 
-        # Display (Optional - for Demo)
-        cv2.putText(frame, f"STATUS: {posture}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        cv2.imshow("Guardian Eye", frame)
-        if cv2.waitKey(1) == 27: break
+                curr_time = time.time()
+                fps = 1/(curr_time - prev_time)
+                prev_time = curr_time
+                fps_history.append(fps)
+                if len(fps_history)>30:
+                    fps_history.pop(0)
+                fps_smooth = sum(fps_history)/len(fps_history)
 
-    cap.release()
+                cv2.putText(frame, f"FPS:{fps_smooth:.1f}",(10,30),
+                            cv2.FONT_HERSHEY_SIMPLEX,0.7,color,2)
+                cv2.putText(frame, f"Posture:{posture}",(10,60),
+                            cv2.FONT_HERSHEY_SIMPLEX,0.7,color,2)
+                
+                if "FALL DETECTED" in posture:
+                    cv2.putText(frame, "!!! FALL DETECTED !!!",(frame.shape[1]//2-150,50),cv2.FONT_HERSHEY_SIMPLEX,1, (0,0,255),3)
+                    print("Alerting user...")
+                    cap.release()
+                    cv2.destroyAllWindows()
+                    print("="*60)
+                    img_filename = f'Fall_detected_frame.jpg'
+                    cv2.imwrite(img_filename,frame)
+                    print("="*60)
+
+                    #streamlit api call
+
+                    break
+
+                cv2.imshow('Pose Detection', frame)
+
+                key = cv2.waitKey(1) &  0xFF
+                if key == ord('q') or key ==27:
+                    break
+                elif key == ord('s'):
+                    filename = f'pose_{frame_count}.jpg'
+                    cv2.imwrite(filename, frame)
+                    print("Saved frame")
+    except KeyboardInterrupt:
+        print("Stopped")
+    finally:
+        cap.release()
+        cv2.destroyAllWindows()
+        print(f"Processed {frame_count} frames")
+        print("="*60)
 
 if __name__ == "__main__":
     main()
