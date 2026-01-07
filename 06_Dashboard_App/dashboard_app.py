@@ -221,28 +221,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Sidebar
-with st.sidebar:
-    st.markdown("### <i class='fas fa-cog'></i> Settings", unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div style='padding: 10px; background: rgba(79, 172, 254, 0.1); border: 1px solid rgba(79, 172, 254, 0.3); border-radius: 8px; margin-bottom: 15px;'>
-        <div style='font-size: 10px; color: #4facfe;'>SYNC MODE: 🌐 API CLOUD</div>
-        <div style='font-size: 13px; font-weight: 600;'>Render SQLite -> Streamlit</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.toggle("Real-Time Stream", value=True)
-    st.divider()
-    st.markdown("""
-    <div style='font-size: 12px; color: #666;'>
-        Connected Devices:<br>
-        <span style='color: #fff;'>• RPI-Guardian-01</span><br>
-        <span style='color: #fff;'>• ESP32-Sensor-A</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-# Main Refresh Loop
 # Main Refresh Loop
 st_autorefresh(interval=2000, key="data_refresh")
 
@@ -256,6 +234,39 @@ cam_active = False
 wear_active = False
 latest_cam = None
 latest_wear = None
+
+# Sidebar
+with st.sidebar:
+    st.markdown("### <i class='fas fa-cog'></i> Settings", unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div style='padding: 10px; background: rgba(79, 172, 254, 0.1); border: 1px solid rgba(79, 172, 254, 0.3); border-radius: 8px; margin-bottom: 15px;'>
+        <div style='font-size: 10px; color: #4facfe;'>SYNC MODE: 🌐 API CLOUD</div>
+        <div style='font-size: 13px; font-weight: 600;'>Render SQLite -> Streamlit</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.toggle("Real-Time Stream", value=True)
+    st.divider()
+    
+    # Check for Blynk history
+    blynk_status = "⚪ Ready"
+    blynk_color = "#AAA"
+    if not df.empty and 'alert_status' in df.columns:
+        if df['alert_status'].str.contains('Blynk', na=False).any():
+            blynk_status = "🟢 Verified"
+            blynk_color = "#00FF7F"
+
+    st.markdown(f"""
+    <div style='font-size: 12px; color: #666;'>
+        Connected Devices:<br>
+        <span style='color: #fff;'>• RPI-Guardian-01</span><br>
+        <span style='color: #fff;'>• ESP32-Sensor-A</span>
+        <div style='margin-top: 10px; border-top: 1px solid #444; padding-top: 8px;'></div>
+        Cloud Services:<br>
+        <span style='color: {blynk_color};'>• Blynk IoT Alerts: {blynk_status}</span>
+    </div>
+    """, unsafe_allow_html=True)
 
 if not df.empty:
     df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
