@@ -42,7 +42,7 @@ st.markdown("""
     /* REMOVE STREAMLIT BRANDING */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
+    /* header {visibility: hidden;} REMOVED to view tabs */
     
     /* GLASSMORPHISM CARDS */
     .glass-card {
@@ -138,6 +138,7 @@ def get_metric_card(label, value, icon_class, suffix=""):
 # --- DATA IO ---
 import requests
 
+@st.cache_data(ttl=2, show_spinner=False)
 def get_data():
     # Use your Render Backend URL
     BACKEND_URL = "https://guardian-ai-backend-7zfj.onrender.com"
@@ -242,7 +243,8 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
 # Main Refresh Loop
-st_autorefresh(interval=1000, key="data_refresh")
+# Main Refresh Loop
+st_autorefresh(interval=2000, key="data_refresh")
 
 df = get_data()
 
@@ -266,26 +268,17 @@ if not df.empty:
     cam_active = not cam_df.empty
     if cam_active:
         latest_cam = cam_df.iloc[0]
-        # Active if msg in last 5 mins (for reliability)
-        cam_active = (current_time - latest_cam['timestamp']).total_seconds() < 300
+        # Active if msg in last 120 seconds (REAL-TIME MODE)
+        cam_active = (current_time - latest_cam['timestamp']).total_seconds() < 120
 
     wear_active = not wear_df.empty
     if wear_active:
         latest_wear = wear_df.iloc[0]
-        # Active if msg in last 5 mins
-        wear_active = (current_time - latest_wear['timestamp']).total_seconds() < 300
+        # Active if msg in last 120 seconds (REAL-TIME MODE)
+        wear_active = (current_time - latest_wear['timestamp']).total_seconds() < 120
 
 # 3. Add Debug Info to Sidebar
-with st.sidebar:
-    st.divider()
-    st.markdown("### 🔍 Live API Debug")
-    st.write(f"Total Records: {len(df)}")
-    st.write(f"Current UTC: {current_time.strftime('%H:%M:%S')}")
-    if wear_active and latest_wear is not None:
-        st.write(f"Wearable Time: {latest_wear['timestamp'].strftime('%H:%M:%S')}")
-        st.write(f"Delay: {int((current_time - latest_wear['timestamp']).total_seconds()/60)} mins")
-
-    # --- FUSION ENGINE (Dashboard Side) ---
+    # Fusion Engine Logic
     is_vision_fall = False
     is_imu_impact = False
     
@@ -299,17 +292,8 @@ with st.sidebar:
         wearable_fall = ("FALLING" in str(latest_wear['posture_class']))
         high_impact = (latest_wear['accel_magnitude'] > 2.2)
         is_imu_impact = wearable_fall or high_impact
-        
-    # Debug: Print fusion status (you can remove this later)
-    if is_vision_fall or is_imu_impact:
-        st.sidebar.write(f"🔍 DEBUG:")
-        st.sidebar.write(f"Vision Fall: {is_vision_fall}")
-        st.sidebar.write(f"IMU Impact: {is_imu_impact}")
-        if latest_cam is not None:
-            st.sidebar.write(f"Cam: {latest_cam['vision_status']}, {latest_cam['posture_class']}")
-        if latest_wear is not None:
-            st.sidebar.write(f"Wear: {latest_wear['posture_class']}, {latest_wear['accel_magnitude']:.2f}G")
-        
+
+
     # --- UI DISPLAY VARIABLES ---
     # If a device is offline, we fallback to the "latest" available record for Global KPIs
     # But for Fusion Verification, we show "OFFLINE"
@@ -327,29 +311,31 @@ with st.sidebar:
     
     # --- TABS LAYOUT ---
     tab1, tab2, tab3 = st.tabs([":material/monitor: Live Monitor", ":material/analytics: Analytics", ":material/list: System Logs"])
-    
+
     # TAB 1: LIVE MONITOR (KPIs)
     with tab1:
         st.markdown("<br>", unsafe_allow_html=True)
         k1, k2, k3, k4 = st.columns(4)
         
         with k1:
-            # Live Activity now shows ESP32 (Wearable) posture with confidence
+            # Live Activity (Wearable)
             if latest_wear is not None:
                 val = latest_wear['posture_class']
-                conf = latest_wear['risk_score']  # Using risk_score as confidence proxy
+                conf = latest_wear['risk_score'] if 'risk_score' in latest_wear else 0.0
                 conf_bar = f"<div style='margin-top: 5px; font-size: 11px; color: #888;'>Confidence: {conf:.1f}%</div><div style='width: 100%; height: 3px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 3px;'><div style='width: {min(conf, 100)}%; height: 100%; background: linear-gradient(90deg, #4facfe, #00f2fe); border-radius: 2px;'></div></div>"
-                st.markdown(get_metric_card("Live Activity", val, "fas fa-walking") + conf_bar, unsafe_allow_html=True)
+                # Pass bar AS SUFFIX to keep it inside the card
+                st.markdown(get_metric_card("Live Activity", val, "fas fa-walking", suffix=conf_bar), unsafe_allow_html=True)
             else:
                 st.markdown(get_metric_card("Live Activity", "WAITING...", "fas fa-walking"), unsafe_allow_html=True)
                 
         with k2:
-            # Vision Status now shows Camera vision with confidence
+            # Vision Status (Camera)
             if latest_cam is not None:
                 val = latest_cam['vision_status']
-                conf = latest_cam['risk_score']  # Using risk_score as confidence
+                conf = latest_cam['risk_score'] if 'risk_score' in latest_cam else 0.0
                 conf_bar = f"<div style='margin-top: 5px; font-size: 11px; color: #888;'>Confidence: {conf:.1f}%</div><div style='width: 100%; height: 3px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 3px;'><div style='width: {min(conf, 100)}%; height: 100%; background: linear-gradient(90deg, #4facfe, #00f2fe); border-radius: 2px;'></div></div>"
-                st.markdown(get_metric_card("Vision Status", val, "fas fa-eye") + conf_bar, unsafe_allow_html=True)
+                # Pass bar AS SUFFIX to keep it inside the card
+                st.markdown(get_metric_card("Vision Status", val, "fas fa-eye", suffix=conf_bar), unsafe_allow_html=True)
             else:
                 st.markdown(get_metric_card("Vision Status", "NO SIGNAL", "fas fa-eye"), unsafe_allow_html=True)
             
@@ -530,19 +516,39 @@ with st.sidebar:
         if not df.empty:
             # Custom Styled Table
             table_df = df[['timestamp', 'device_id', 'posture_class', 'alert_status', 'fatigue_index']].head(10)
-            
-            # Use Styler for glassmorphism effect on table
-            st.dataframe(table_df, use_container_width=True)
+            st.dataframe(table_df, use_container_width=True, hide_index=True)
         else:
             st.info("📜 **System Logs**: Waiting for incoming telemetry streams...")
         
         st.markdown("""
         <style>
-            .dataframe { font-family: 'Inter'; width: 100%; border-collapse: collapse; }
-            .dataframe td, .dataframe th { padding: 12px; text-align: left; border-bottom: 1px solid #333; color: #DDD; }
-            .dataframe th { background-color: #1E1E1E; color: #888; font-weight: 600; text-transform: uppercase; font-size: 12px; }
-            .dataframe tr:hover { background-color: #262626; }
+            [data-testid="stDataFrame"] {
+                background: rgba(255, 255, 255, 0.05);
+                border-radius: 12px;
+                padding: 10px;
+            }
         </style>
         """, unsafe_allow_html=True)
-        
-        st.dataframe(table_df, width="stretch", hide_index=True)
+
+    # --- MAIN PAGE DEBUG SECTION ---
+    with st.expander("🔍 System Internals & Live Debug", expanded=False):
+        d1, d2 = st.columns(2)
+        with d1:
+            st.markdown("### 📡 API Connection")
+            st.write(f"**Total Records Fetched:** {len(df)}")
+            st.write(f"**Server Time (UTC):** {current_time.strftime('%H:%M:%S')}")
+            if wear_active and latest_wear is not None:
+                st.write(f"**Wearable Timestamp:** {latest_wear['timestamp'].strftime('%H:%M:%S')}")
+                delay = int((current_time - latest_wear['timestamp']).total_seconds()/60)
+                st.write(f"**Latency/Delay:** {delay} mins")
+            else:
+                st.write("**Wearable Status:** Not Active")
+                
+        with d2:
+            st.markdown("### ⚡ Fusion Engine State")
+            st.write(f"**Vision Fall Detected:** {is_vision_fall}")
+            st.write(f"**IMU Impact Detected:** {is_imu_impact}")
+            if latest_cam is not None:
+                st.write(f"**Latest Cam Class:** {latest_cam.get('posture_class', 'N/A')}")
+            if latest_wear is not None:
+                st.write(f"**Latest Wear Accel:** {latest_wear.get('accel_magnitude', 0.0):.2f} G")
