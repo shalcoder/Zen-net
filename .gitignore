@@ -7,6 +7,9 @@ __pycache__/
 venv/
 env/
 .env
+venv_311/
+
+
 
 # TF Hub Models
 # (These are large cached files)

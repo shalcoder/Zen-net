@@ -1,5 +1,25 @@
-opencv-python
-tensorflow
-tensorflow-hub
-numpy
-matplotlib
+# GUARDIAN AI - System Requirements (Python 3.11)
+
+# Core Vision & AI
+opencv-python-headless  # Use headless for RPi if no monitor, or just opencv-python
+numpy<2.0.0             # Strict version for TensorFlow compatibility
+tensorflow>=2.15.0      # Main library for Laptop/Conversion
+tflite-runtime          # Optimized for Raspberry Pi 4 CPU
+tensorflow-hub>=0.16.1
+
+# Dashboard & Analytics
+streamlit>=1.30.0
+pandas>=2.1.0
+plotly>=5.18.0
+SQLAlchemy>=2.0.0
+streamlit-autorefresh
+
+# Backend & API
+fastapi
+uvicorn
+pydantic>=2.0.0
+requests
+
+# Utilities
+scipy
+python-dateutil

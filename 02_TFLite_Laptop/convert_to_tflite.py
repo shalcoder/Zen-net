@@ -5,36 +5,36 @@ import cv2
 import numpy as np
 
 def representative_data_gen():
-    # Use the existing video for calibration data
+    # Use the existing video for calibration data, or random fallback
     video_path = "queda.mp4"
     cap = cv2.VideoCapture(video_path)
     
     num_calibration_steps = 100
+    
+    # Check if video opened successfully
+    use_random = not cap.isOpened()
+    if use_random:
+        print("Warning: 'queda.mp4' not found. Using random noise for calibration (Not recommended for high accuracy).")
+    
     for _ in range(num_calibration_steps):
-        if not cap.isOpened():
-            break
-        ret, frame = cap.read()
-        if not ret:
-            break
+        if use_random:
+            # MoveNet Lightning expects [1, 192, 192, 3] usually.
+            # Generate int32 random noise [0, 255]
+            img = tf.random.uniform((1, 192, 192, 3), minval=0, maxval=255, dtype=tf.int32)
+        else:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            # Resize and process
+            # Cast to int32 because model expects int32
+            img_tf = tf.expand_dims(frame, axis=0)
+            img_tf = tf.image.resize_with_pad(img_tf, 192, 192)
+            img = tf.cast(img_tf, tf.int32)
             
-        # Resize to model input size (192, 192, 3) or (160, 320) depending on variant
-        # Multipose Lightning 1 input is [1, 160, 320, 3] usually, let's verify or use the resizing from fall.py
-        # fall.py uses: tf.image.resize_with_pad(tf.expand_dims(img, axis=0), 160, 320)
-        
-        input_size = 320
-        # Resize and pad logic similar to fall.py to ensure distribution matches
-        img = frame.copy()
-        img = tf.image.resize_with_pad(tf.expand_dims(img, axis=0), 160, 320)
-        img = tf.cast(img, dtype=tf.int32) # Model expects int32 input
-        
-        # TFLite converter expects float input for calibration if the input is quantized, 
-        # but the source model takes int32? 
-        # Actually, MoveNet Multipose Lightning expects [1, 160, 320, 3] int32 tensor.
-        # But for representative dataset, we usually yield the input tensors.
-        
         yield [img]
         
-    cap.release()
+    if not use_random:
+        cap.release()
 
 def convert():
     print("Loading model from TF Hub...")
@@ -44,22 +44,32 @@ def convert():
     print("Setting up TFLite Converter...")
     converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
     
-    # Dynamic Range Quantization with TF Select Ops (to handle StridedSlice)
+    # --- DYNAMIC RANGE QUANTIZATION (Best for RPi4 CPU) ---
+    # Full Int8 fails due to MoveNet's custom slicing ops. 
+    # Dynamic Range gives 4x size reduction and good speedup on CPU.
+    
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    
+    # Allow custom ops (Flex/Select) for MoveNet
     converter.target_spec.supported_ops = [
         tf.lite.OpsSet.TFLITE_BUILTINS,
-        tf.lite.OpsSet.SELECT_TF_OPS # Required for MoveNet's slicing operations
+        tf.lite.OpsSet.SELECT_TF_OPS
     ]
     
-    print("Converting model with Dynamic Range Quantization (TF Select Enabled)...")
+    # Remove strict int8 input/output requirements to avoid signature conflicts.
+    # The models input will remain int32 (as per Hub signature) and output float32.
+    
+    print("Converting model with Dynamic Range Quantization...")
+    
     tflite_model = converter.convert()
     
-    output_path = "movenet_multipose_lighting_quant.tflite"
+    output_path = "model_quant_dynamic.tflite"
     with open(output_path, "wb") as f:
         f.write(tflite_model)
         
     print(f"Success! Model saved to {output_path}")
     print(f"Size: {len(tflite_model) / 1024 / 1024:.2f} MB")
+     
         
 
 if __name__ == "__main__":

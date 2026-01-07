@@ -11,7 +11,7 @@ model = hub.load("https://tfhub.dev/google/movenet/multipose/lightning/1")
 movenet = model.signatures["serving_default"]
 
 # Video Path - Change this to your video file path
-VIDEO_PATH = "E:/human-fall-detection/B_D_0016.mp4"
+VIDEO_PATH = "E:/human-fall-detection/uploads/20240912_102048.mp4"
 
 # Configuration
 THRESHOLD = 0.3
