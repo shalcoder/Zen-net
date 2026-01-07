@@ -18,16 +18,18 @@ BLYNK_EVENT_CODE = os.getenv("BLYNK_EVENT_CODE", "fall_alert")
 
 def send_blynk_alert(message: str):
     """Send fall alert via Blynk cloud"""
-    try:
-        # Blynk Event API
-        url = f"https://blynk.cloud/external/api/logEvent?token={BLYNK_AUTH_TOKEN}&code={BLYNK_EVENT_CODE}"
-        response = requests.get(url, timeout=3)
-        if response.status_code == 200:
-            print(f"✅ Blynk alert sent: {message}")
-        else:
-            print(f"⚠️ Blynk alert failed: {response.status_code}")
-    except Exception as e:
-        print(f"❌ Blynk error: {e}")
+    if BLYNK_AUTH_TOKEN:
+        try:
+            url = f"https://blynk.cloud/external/api/logEvent?token={BLYNK_AUTH_TOKEN}&code={BLYNK_EVENT_CODE}"
+            response = requests.get(url, timeout=3) # Re-added timeout for robustness
+            if response.status_code == 200:
+                print(f"Blynk Alert Sent! Response: {response.status_code}")
+            else:
+                print(f"Failed to send Blynk alert: {response.status_code} {response.text}")
+        except Exception as e:
+            print(f"Blynk connection error: {e}")
+    else:
+        print("Blynk token not configured, skipping alert.")
 
 app = FastAPI()
 fatigue = FatigueComputer()
@@ -163,7 +165,16 @@ def fusion_engine(device_id: str, posture: str, accel: float, vision: str, risk:
 
     if verified_fall and imu_spike:
         alert = "CRITICAL: VERIFIED FALL"
-        fatigue_idx = 0.0
+        print(f"Received MPU Data: {data}")
+        
+        # Calculate Fatigue (using new logic)
+        fatigue_val = 0.0
+        fatigue_idx = fatigue.calculate_fatigue_score(pd.DataFrame([{
+            "timestamp": now_utc(),
+            "posture_class": posture,
+            "accel_magnitude": accel,
+            "slump_metric": 0.0
+        }]))
     else:
         alert = fatigue.get_status_label(accel)
         fatigue_idx = fatigue.calculate_fatigue_score(pd.DataFrame([{

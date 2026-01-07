@@ -250,11 +250,11 @@ with st.sidebar:
     st.divider()
     
     # Check for Blynk history
-    blynk_status = "⚪ Ready"
+    blynk_status = "Ready"
     blynk_color = "#AAA"
     if not df.empty and 'alert_status' in df.columns:
         if df['alert_status'].str.contains('Blynk', na=False).any():
-            blynk_status = "🟢 Verified"
+            blynk_status = "Verified"
             blynk_color = "#00FF7F"
 
     st.markdown(f"""
