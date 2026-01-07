@@ -26,8 +26,10 @@ EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "vaishak.2327@gmail.com")
 
 def send_email_alert(risk_score: float):
     """Send emergency email alert using Gmail SMTP"""
-    if "your_email" in EMAIL_SENDER or "your_app_password" in EMAIL_PASSWORD:
-        print("Email not configured properly. Skipping.")
+    print(f"Attempting to send email from {EMAIL_SENDER} to {EMAIL_RECEIVER}...")
+    
+    if not EMAIL_PASSWORD or "your_app" in EMAIL_PASSWORD:
+        print("ERROR: Email Password invalid or missing. Check Environment Variables.")
         return
 
     subject = f"🚨 EMERGENCY: Fall Detected! Risk {risk_score:.1f}%"
@@ -50,9 +52,9 @@ def send_email_alert(risk_score: float):
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
             server.login(EMAIL_SENDER, EMAIL_PASSWORD)
             server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER, msg.as_string())
-        print("Email Alert Sent!")
+        print(f"SUCCESS: Email Alert Sent to {EMAIL_RECEIVER}!")
     except Exception as e:
-        print(f"Email failed: {e}")
+        print(f"FAILURE: Email sending error: {e}")
 
 def send_blynk_alert(message: str):
     """Send fall alert via Blynk cloud"""
