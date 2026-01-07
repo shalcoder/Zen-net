@@ -326,7 +326,7 @@ if not df.empty:
     # TAB 1: LIVE MONITOR (KPIs)
     with tab1:
         st.markdown("<br>", unsafe_allow_html=True)
-        k1, k2, k3, k4 = st.columns(4)
+        k1, k2, k3 = st.columns(3)
         
         with k1:
             # Live Activity (Wearable)
@@ -355,11 +355,6 @@ if not df.empty:
             trend_html = f"<div style='font-size: 11px; color: {trend_color}; margin-top: -10px;'><i class='{trend_icon}'></i> Trend: {trend_label}</div>"
             val_risk = latest_global['risk_score'] if not df.empty else 0.0
             st.markdown(get_metric_card("Impact/Risk", f"{val_risk:.1f}", "fas fa-exclamation-circle") + trend_html, unsafe_allow_html=True)
-            
-        with k4:
-            val_fatigue = latest_global['fatigue_index'] if not df.empty else 0.0
-            mobility_index = round(100 - (val_fatigue * 0.5), 1)
-            st.markdown(get_metric_card("Mobility Index", f"{mobility_index}", "fas fa-heartbeat", suffix="%"), unsafe_allow_html=True)
             
         # AI Insight Banner
         insight_text, insight_style = generate_ai_insight(df)
