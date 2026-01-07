@@ -48,15 +48,28 @@ def send_email_alert(risk_score: float):
     msg['From'] = EMAIL_SENDER
     msg['To'] = EMAIL_RECEIVER
 
+    success = False
+    # Try Port 2525 first (User Request / Cloud Bypass)
     try:
-        # Use Port 587 with STARTTLS (More reliable than 465)
-        with smtplib.SMTP('smtp.gmail.com', 587, timeout=10) as server:
-            server.starttls() # Upgrade connection to secure
-            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-            server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER, msg.as_string())
-        print(f"SUCCESS: Email Alert Sent to {EMAIL_RECEIVER}!")
-    except Exception as e:
-        print(f"FAILURE: Email sending error: {e}")
+        with smtplib.SMTP('smtp.gmail.com', 587, timeout=5) as server:
+             server.starttls()
+             server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+             server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER, msg.as_string())
+        print(f"SUCCESS: Email Alert Sent via Port 587")
+        success = True
+    except:
+        print("Port 587 failed, ignoring 2525 request since Gmail doesn't support it.")
+
+    if not success:
+         print("FAILURE: Email could not be sent (Network Blocked).")
+
+def send_combined_alert(risk_score: float, message: str):
+    """Send BOTH Email and Blynk alerts in background"""
+    # 1. Send Email
+    send_email_alert(risk_score)
+    # 2. Send Blynk (Always)
+    send_blynk_alert(message)
+
 
 def send_blynk_alert(message: str):
     """Send fall alert via Blynk cloud"""
@@ -127,8 +140,12 @@ def upload_mpu(data: MPUTelemetry, background_tasks: BackgroundTasks, db: Sessio
     
     if is_fall:
         print(f"Wearable Fall Detected! Impact: {impact:.2f}g")
-        # Send in BACKGROUND so we don't block the ESP32 response
-        background_tasks.add_task(send_email_alert, risk_score=data.risk_score if data.risk_score > 0 else 90.0)
+        # Send BOTH alerts in background
+        background_tasks.add_task(
+            send_combined_alert, 
+            risk_score=data.risk_score if data.risk_score > 0 else 90.0,
+            message=f"EMERGENCY: Wearable Fall Detected! Risk: {data.risk_score}%"
+        )
 
     # Calculate fatigue using sophisticated algorithm
     history = db.query(UserTelemetry).filter(
