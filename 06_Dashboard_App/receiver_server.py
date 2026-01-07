@@ -111,10 +111,23 @@ def upload_mpu(data: MPUTelemetry, db: Session = Depends(get_db)):
 def upload_cam(data: CamTelemetry, db: Session = Depends(get_db)):
     posture = "FALLING" if data.vision_status == "Fall" else "STANDING"
     
-    # Send Blynk alert if fall is detected
+    # 1. Check for recent high impact from wearable (within last 5 seconds)
+    recent_impact = db.query(UserTelemetry).filter(
+        UserTelemetry.device_id.like("%ESP32%"),
+        UserTelemetry.accel_magnitude > 2.2,
+        UserTelemetry.timestamp >= (now_utc() - timedelta(seconds=5))
+    ).first()
+
+    verified_fall = False
     if data.vision_status == "Fall":
-        send_blynk_alert(f"⚠️ FALL DETECTED by {BLYNK_DEVICE_NAME}! Risk: {data.risk_score:.1f}%")
-    
+        # Dual Verification Logic
+        if recent_impact:
+            verified_fall = True
+            print(f"CONFIRMED FALL: Vision + Wearable Impact ({recent_impact.accel_magnitude:.2f}g)")
+            send_blynk_alert(f"EMERGENCY: Confirmed Fall! Risk: {data.risk_score:.1f}%")
+        else:
+             print(f"Vision Fall detected, but no wearable impact found. Alert suppressed.")
+
     # Calculate fatigue using sophisticated algorithm
     history = db.query(UserTelemetry).filter(
         UserTelemetry.device_id == "RPI_CAM_01"
@@ -138,7 +151,7 @@ def upload_cam(data: CamTelemetry, db: Session = Depends(get_db)):
         slump_metric=0.0,
         fatigue_index=fatigue_idx,
         vision_status=data.vision_status,
-        alert_status="CAM_DATA",
+        alert_status="Blynk OK" if verified_fall else "None",
         risk_score=data.risk_score
     ))
     db.commit()
