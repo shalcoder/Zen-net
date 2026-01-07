@@ -35,6 +35,25 @@ fatigue = FatigueComputer()
 # Initialize DB tables
 init_db()
 
+@app.get("/")
+def root():
+    """API root endpoint"""
+    return {
+        "status": "online",
+        "service": "Guardian AI Fall Detection Backend",
+        "version": "1.0.0",
+        "endpoints": {
+            "mpu": "/upload_telemetry_mpu",
+            "camera": "/upload_telemetry_cam",
+            "docs": "/docs"
+        }
+    }
+
+@app.get("/health")
+def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy", "service": "guardian-ai-backend"}
+
 class MPUTelemetry(BaseModel):
     posture_class: str  # STANDING, SITTING, FALLING
     risk_score: float   # 0-100
