@@ -478,54 +478,63 @@ with st.sidebar:
     with tab2:
         c1, c2 = st.columns([2, 1])
         
-        with c1:
-            st.markdown("<div class='metric-label'><i class='fas fa-chart-area'></i> Real-Time Fatigue Analytics</div>", unsafe_allow_html=True)
-            
-            fig = px.area(df, x='timestamp', y='fatigue_index', 
-                          height=350,
-                          color_discrete_sequence=['#4facfe'])
-            
-            fig.add_hline(y=80, line_dash="dash", line_color="#ff4b4b", 
-                          annotation_text="Critical Risk", annotation_position="top right")
-            fig.update_yaxes(range=[0, 105]) # Fixed range for clarity
+        if not df.empty:
+            with c1:
+                st.markdown("<div class='metric-label'><i class='fas fa-chart-area'></i> Real-Time Fatigue Analytics</div>", unsafe_allow_html=True)
+                
+                fig = px.area(df, x='timestamp', y='fatigue_index', 
+                              height=350,
+                              color_discrete_sequence=['#4facfe'])
+                
+                fig.add_hline(y=80, line_dash="dash", line_color="#ff4b4b", 
+                              annotation_text="Critical Risk", annotation_position="top right")
+                fig.update_yaxes(range=[0, 105]) # Fixed range for clarity
 
-            fig.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                font={'color': '#A0A0A0'},
-                margin=dict(l=0, r=0, t=20, b=0),
-                xaxis=dict(showgrid=False),
-                yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)')
-            )
-            st.plotly_chart(fig, width="stretch")
-            st.caption(":material/help: **Guide**: This graph shows the worker's Fatigue Score (0-100) over time. "
-                       "Scores **above 80** (Red Line) indicate exhaustion and high fall risk.")
-            
-        with c2:
-            st.markdown("<div class='metric-label'><i class='fas fa-chart-pie'></i> Activity Distribution</div>", unsafe_allow_html=True)
-            
-            # Donut Chart
-            posture_counts = df['posture_class'].value_counts().reset_index()
-            posture_counts.columns = ['class', 'count']
-            
-            fig_pie = px.pie(posture_counts, values='count', names='class', hole=0.7,
-                             color_discrete_sequence=['#00f2fe', '#4facfe', '#00c6ff'])
-            
-            fig_pie.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)',
-                showlegend=True,
-                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
-                margin=dict(l=0, r=0, t=20, b=50),
-                font={'color': '#FFF'}
-            )
-            st.plotly_chart(fig_pie, width="stretch")
+                fig.update_layout(
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font={'color': '#A0A0A0'},
+                    margin=dict(l=0, r=0, t=20, b=0),
+                    xaxis=dict(showgrid=False),
+                    yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)')
+                )
+                st.plotly_chart(fig, width="stretch")
+                st.caption(":material/help: **Guide**: This graph shows the worker's Fatigue Score (0-100) over time. "
+                           "Scores **above 80** (Red Line) indicate exhaustion and high fall risk.")
+                
+            with c2:
+                st.markdown("<div class='metric-label'><i class='fas fa-chart-pie'></i> Activity Distribution</div>", unsafe_allow_html=True)
+                
+                # Donut Chart
+                posture_counts = df['posture_class'].value_counts().reset_index()
+                posture_counts.columns = ['class', 'count']
+                
+                fig_pie = px.pie(posture_counts, values='count', names='class', hole=0.7,
+                                 color_discrete_sequence=['#00f2fe', '#4facfe', '#00c6ff'])
+                
+                fig_pie.update_layout(
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    showlegend=True,
+                    legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
+                    margin=dict(l=0, r=0, t=20, b=50),
+                    font={'color': '#FFF'}
+                )
+                st.plotly_chart(fig_pie, width="stretch")
+        else:
+            st.info("📊 **Analytics Waiting**: connect devices to see real-time charts.")
 
     # TAB 3: LOGS
     with tab3:
         st.markdown("<div class='metric-label' style='margin-left: 10px; margin-top: 20px;'><i class='fas fa-list'></i> Recent Telemetry Logs</div>", unsafe_allow_html=True)
         
-        # Custom Styled Table
-        table_df = df[['timestamp', 'device_id', 'posture_class', 'alert_status', 'fatigue_index']].head(10)
+        if not df.empty:
+            # Custom Styled Table
+            table_df = df[['timestamp', 'device_id', 'posture_class', 'alert_status', 'fatigue_index']].head(10)
+            
+            # Use Styler for glassmorphism effect on table
+            st.dataframe(table_df, use_container_width=True)
+        else:
+            st.info("📜 **System Logs**: Waiting for incoming telemetry streams...")
         
         st.markdown("""
         <style>
