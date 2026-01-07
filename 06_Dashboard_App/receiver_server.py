@@ -114,8 +114,10 @@ def get_db():
 def now_utc():
     return datetime.now(timezone.utc)
 
+from fastapi import BackgroundTasks
+
 @app.post("/upload_telemetry_mpu")
-def upload_mpu(data: MPUTelemetry, db: Session = Depends(get_db)):
+def upload_mpu(data: MPUTelemetry, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     impact = 2.8 if data.posture_class == "FALLING" else 1.0
     
     # Check for direct MPU Fall (Posture=FALLING)
@@ -123,7 +125,8 @@ def upload_mpu(data: MPUTelemetry, db: Session = Depends(get_db)):
     
     if is_fall:
         print(f"Wearable Fall Detected! Impact: {impact:.2f}g")
-        send_email_alert(risk_score=data.risk_score if data.risk_score > 0 else 90.0)
+        # Send in BACKGROUND so we don't block the ESP32 response
+        background_tasks.add_task(send_email_alert, risk_score=data.risk_score if data.risk_score > 0 else 90.0)
 
     # Calculate fatigue using sophisticated algorithm
     history = db.query(UserTelemetry).filter(
