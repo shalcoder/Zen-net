@@ -246,35 +246,44 @@ st_autorefresh(interval=1000, key="data_refresh")
 
 df = get_data()
 
-if df.empty:
-    st.info("📡 **Waiting for telemetry stream...**")
-    st.warning("No data found in database. Please ensure your ESP32 and Raspberry Pi are sending data to the Render backend URL shown in the sidebar.")
-    st.stop()
-    # --- LOGIC SEPARATION: Multi-Modal Stream Handling ---
+# Initialize variables for smooth rendering even if df is empty
+current_time = pd.Timestamp.now(tz='UTC')
+cam_df = pd.DataFrame()
+wear_df = pd.DataFrame()
+cam_active = False
+wear_active = False
+latest_cam = None
+latest_wear = None
+
+if not df.empty:
     df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
-    current_time = pd.Timestamp.now(tz='UTC')
     
     # 1. Filter streams
     cam_df = df[df['device_id'].str.contains("RPI", case=False, na=False)]
     wear_df = df[df['device_id'].str.contains("ESP32", case=False, na=False)]
 
-    # 2. Activity status (DISABLED TIMEOUT FOR DEBUGGING)
-    # We will show the latest data even if it's "stale" to ensure the UI renders
+    # 2. Activity status
     cam_active = not cam_df.empty
-    latest_cam = cam_df.iloc[0] if cam_active else None
+    if cam_active:
+        latest_cam = cam_df.iloc[0]
+        # Active if msg in last 5 mins (for reliability)
+        cam_active = (current_time - latest_cam['timestamp']).total_seconds() < 300
 
     wear_active = not wear_df.empty
-    latest_wear = wear_df.iloc[0] if wear_active else None
+    if wear_active:
+        latest_wear = wear_df.iloc[0]
+        # Active if msg in last 5 mins
+        wear_active = (current_time - latest_wear['timestamp']).total_seconds() < 300
 
-    # 3. Add Debug Info to Sidebar
-    with st.sidebar:
-        st.divider()
-        st.markdown("### 🔍 Live API Debug")
-        st.write(f"Total Records: {len(df)}")
-        st.write(f"Current UTC: {current_time.strftime('%H:%M:%S')}")
-        if wear_active:
-            st.write(f"Wearable Time: {latest_wear['timestamp'].strftime('%H:%M:%S')}")
-            st.write(f"Delay: {int((current_time - latest_wear['timestamp']).total_seconds()/60)} mins")
+# 3. Add Debug Info to Sidebar
+with st.sidebar:
+    st.divider()
+    st.markdown("### 🔍 Live API Debug")
+    st.write(f"Total Records: {len(df)}")
+    st.write(f"Current UTC: {current_time.strftime('%H:%M:%S')}")
+    if wear_active and latest_wear is not None:
+        st.write(f"Wearable Time: {latest_wear['timestamp'].strftime('%H:%M:%S')}")
+        st.write(f"Delay: {int((current_time - latest_wear['timestamp']).total_seconds()/60)} mins")
 
     # --- FUSION ENGINE (Dashboard Side) ---
     is_vision_fall = False
@@ -305,7 +314,16 @@ if df.empty:
     # If a device is offline, we fallback to the "latest" available record for Global KPIs
     # But for Fusion Verification, we show "OFFLINE"
     
-    latest_global = df.iloc[0] # For generic KPIs like Fatigue / Mobility Index
+    # Safe fallback for global KPIs if database is empty
+    if not df.empty:
+        latest_global = df.iloc[0]
+    else:
+        latest_global = {
+            'risk_score': 0.0,
+            'fatigue_index': 0.0,
+            'posture_class': 'OFFLINE',
+            'vision_status': 'NO SIGNAL'
+        }
     
     # --- TABS LAYOUT ---
     tab1, tab2, tab3 = st.tabs([":material/monitor: Live Monitor", ":material/analytics: Analytics", ":material/list: System Logs"])
@@ -338,10 +356,12 @@ if df.empty:
         with k3:
             trend_icon, trend_color, trend_label = get_trend_indicator(df)
             trend_html = f"<div style='font-size: 11px; color: {trend_color}; margin-top: -10px;'><i class='{trend_icon}'></i> Trend: {trend_label}</div>"
-            st.markdown(get_metric_card("Impact/Risk", f"{latest_global['risk_score']:.1f}", "fas fa-exclamation-circle") + trend_html, unsafe_allow_html=True)
+            val_risk = latest_global['risk_score'] if not df.empty else 0.0
+            st.markdown(get_metric_card("Impact/Risk", f"{val_risk:.1f}", "fas fa-exclamation-circle") + trend_html, unsafe_allow_html=True)
             
         with k4:
-            mobility_index = round(100 - (latest_global['fatigue_index'] * 0.5), 1)
+            val_fatigue = latest_global['fatigue_index'] if not df.empty else 0.0
+            mobility_index = round(100 - (val_fatigue * 0.5), 1)
             st.markdown(get_metric_card("Mobility Index", f"{mobility_index}", "fas fa-heartbeat", suffix="%"), unsafe_allow_html=True)
             
         # AI Insight Banner
