@@ -136,12 +136,35 @@ def get_metric_card(label, value, icon_class, suffix=""):
     """
 
 # --- DATA IO ---
+import requests
+
 def get_data():
-    db = SessionLocal()
-    data = db.query(UserTelemetry).order_by(UserTelemetry.timestamp.desc()).limit(200).all()
-    db.close()
-    if not data: return pd.DataFrame()
-    return pd.DataFrame([vars(d) for d in data]).drop(columns=['_sa_instance_state'])
+    # Use your Render Backend URL
+    BACKEND_URL = "https://guardian-ai-backend-7zfj.onrender.com"
+    
+    try:
+        response = requests.get(f"{BACKEND_URL}/get_telemetry?limit=200", timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if not data: return pd.DataFrame()
+            df = pd.DataFrame(data)
+            # Ensure timestamp is datetime object
+            if 'timestamp' in df.columns:
+                df['timestamp'] = pd.to_datetime(df['timestamp'])
+            return df
+        else:
+            # Fallback to empty if server returns error
+            return pd.DataFrame()
+    except Exception as e:
+        # Fallback for local testing: try reading local DB if API fails
+        try:
+            db = SessionLocal()
+            data = db.query(UserTelemetry).order_by(UserTelemetry.timestamp.desc()).limit(200).all()
+            db.close()
+            if not data: return pd.DataFrame()
+            return pd.DataFrame([vars(d) for d in data]).drop(columns=['_sa_instance_state'])
+        except:
+            return pd.DataFrame()
 
 def generate_ai_insight(df):
     if df.empty: return "Initializing Guardian Intelligence...", "normal"
@@ -202,9 +225,9 @@ with st.sidebar:
     st.markdown("### <i class='fas fa-cog'></i> Settings", unsafe_allow_html=True)
     
     st.markdown("""
-    <div style='padding: 10px; background: rgba(0, 255, 127, 0.05); border: 1px solid rgba(0, 255, 127, 0.2); border-radius: 8px; margin-bottom: 15px;'>
-        <div style='font-size: 10px; color: #00FF7F;'>SYSTEM MODE</div>
-        <div style='font-size: 14px; font-weight: 600;'>📁 LOCAL SQLITE</div>
+    <div style='padding: 10px; background: rgba(79, 172, 254, 0.1); border: 1px solid rgba(79, 172, 254, 0.3); border-radius: 8px; margin-bottom: 15px;'>
+        <div style='font-size: 10px; color: #4facfe;'>SYNC MODE: 🌐 API CLOUD</div>
+        <div style='font-size: 13px; font-weight: 600;'>Render SQLite -> Streamlit</div>
     </div>
     """, unsafe_allow_html=True)
 

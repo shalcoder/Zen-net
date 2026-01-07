@@ -142,6 +142,20 @@ def upload_cam(data: CamTelemetry, db: Session = Depends(get_db)):
     db.commit()
     return {"status": "ok", "fusion": "CAM_DATA", "fatigue": fatigue_idx}
 
+@app.get("/get_telemetry")
+def get_telemetry(limit: int = 100, db: Session = Depends(get_db)):
+    """Fetch the latest telemetry records for the dashboard"""
+    data = db.query(UserTelemetry).order_by(UserTelemetry.timestamp.desc()).limit(limit).all()
+    # Convert SQLAlchemy objects to serializable dictionaries
+    result = []
+    for d in data:
+        item = {column.name: getattr(d, column.name) for column in d.__table__.columns}
+        # Convert datetime to string for JSON serialization
+        if item['timestamp']:
+            item['timestamp'] = item['timestamp'].isoformat()
+        result.append(item)
+    return result
+
 @app.post("/upload_telemetry_fusion")
 def fusion_engine(device_id: str, posture: str, accel: float, vision: str, risk: float, db: Session = Depends(get_db)):
     verified_fall = (posture == "FALLING" or vision == "Fall")
