@@ -199,7 +199,28 @@ st.markdown("""
 
 # Sidebar
 with st.sidebar:
-    st.markdown("### <i class='fas fa-cog'></i> Settings", unsafe_allow_html=True)
+    st.markdown("### <i class='fas fa-cog'></i> System Info", unsafe_allow_html=True)
+    
+    # Database Status
+    from database.db_manager import DB_STATUS
+    status_icon = "☁️" if "Cloud" in DB_STATUS else "📁"
+    st.markdown(f"""
+    <div style='padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 15px;'>
+        <div style='font-size: 10px; color: #888;'>DATABASE STATUS</div>
+        <div style='font-size: 14px;'>{status_icon} {DB_STATUS}</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Backend URL for Devices
+    render_url = "https://guardian-ai-backend-7zfj.onrender.com"
+    st.markdown(f"""
+    <div style='padding: 10px; background: rgba(79, 172, 254, 0.1); border: 1px solid rgba(79, 172, 254, 0.3); border-radius: 8px; margin-bottom: 15px;'>
+        <div style='font-size: 10px; color: #4facfe;'>BACKEND URL (FOR DEVICES)</div>
+        <div style='font-size: 11px; word-break: break-all; font-family: monospace;'>{render_url}</div>
+        <div style='font-size: 9px; color: #666; margin-top: 5px;'>Append /upload_telemetry_mpu or /upload_telemetry_cam</div>
+    </div>
+    """, unsafe_allow_html=True)
+
     st.toggle("Real-Time Stream", value=True)
     st.divider()
     st.markdown("""
@@ -216,8 +237,9 @@ st_autorefresh(interval=1000, key="data_refresh")
 df = get_data()
 
 if df.empty:
-    st.info("Waiting for telemetry stream...")
-else:
+    st.info("📡 **Waiting for telemetry stream...**")
+    st.warning("No data found in database. Please ensure your ESP32 and Raspberry Pi are sending data to the Render backend URL shown in the sidebar.")
+    st.stop()
     # --- LOGIC SEPARATION: Multi-Modal Stream Handling ---
     # We must treat Vision (RPi) and Wearable (ESP32) as separate independent streams
     
