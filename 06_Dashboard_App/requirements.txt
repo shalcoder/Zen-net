@@ -1,4 +1,5 @@
 streamlit
+streamlit-autorefresh
 fastapi
 uvicorn
 sqlalchemy
@@ -6,3 +7,5 @@ pydantic
 pandas
 plotly
 numpy
+requests
+psycopg2-binary
