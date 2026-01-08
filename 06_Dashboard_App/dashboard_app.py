@@ -404,7 +404,8 @@ if not df.empty:
             
         # Fusion Verification Logic
         # EMERGENCY if: Camera sees fall (with or without wearable confirmation)
-        verified_fall = is_vision_fall  # Vision is primary indicator
+        # Updated Logic: verified_fall if EITHER sensor detects high confidence fall
+        verified_fall = is_vision_fall or is_imu_impact
         
         # If both sensors agree on fall, it's highest confidence
         both_sensors_fall = is_vision_fall and is_imu_impact
