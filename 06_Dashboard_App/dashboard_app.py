@@ -402,26 +402,22 @@ if not df.empty:
             </div>
             """, unsafe_allow_html=True)
             
-        # Fusion Verification Logic
-        # EMERGENCY if: Camera sees fall (with or without wearable confirmation)
-        # Updated Logic: verified_fall if EITHER sensor detects high confidence fall
-        verified_fall = is_vision_fall or is_imu_impact
+        # Fusion Verification Logic - User Defined Strict Rules
+        # Case 2: BOTH MPU and Cam show fall -> Emergency
+        verified_fall = is_vision_fall and is_imu_impact
         
-        # If both sensors agree on fall, it's highest confidence
-        both_sensors_fall = is_vision_fall and is_imu_impact
-        
-        # Anomaly if only wearable detects (possible device drop, not actual fall)
-        anomaly = is_imu_impact and not is_vision_fall
+        # Case 1 (MPU only) OR Case 3 (Cam only) -> Checking
+        anomaly = (is_vision_fall or is_imu_impact) and not verified_fall
         
         status_color = "#FF453A" if verified_fall else "#FFA500" if anomaly else "#00FF7F"
         
         if verified_fall:
-            if both_sensors_fall:
-                status_msg = "VERIFIED FALL (DUAL SENSOR)"
-            else:
-                status_msg = "VISION FALL DETECTED (EMERGENCY)"
+            status_msg = "VERIFIED FALL (DUAL SENSOR)"
         elif anomaly:
-            status_msg = "WEARABLE SPIKE (CHECKING...)"
+             if is_vision_fall:
+                 status_msg = "VISION ALERT (WAITING FOR MPU...)"
+             else:
+                 status_msg = "IMU IMPACT (WAITING FOR VISION...)"
         else:
             status_msg = "DUAL-SENSOR SYNC: OK"
             
