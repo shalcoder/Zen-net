@@ -295,13 +295,17 @@ if not df.empty:
     
     # Check Vision (Camera)
     if latest_cam is not None:
-        is_vision_fall = (latest_cam['vision_status'] == "Fall") or ("FALLING" in str(latest_cam['posture_class']))
+        # Robust check: convert to upper and look for "FALL"
+        v_status = str(latest_cam.get('vision_status', '')).upper()
+        v_posture = str(latest_cam.get('posture_class', '')).upper()
+        is_vision_fall = ("FALL" in v_status) or ("FALL" in v_posture)
     
     # Check IMU (Wearable) - Check BOTH posture AND impact
     if latest_wear is not None:
         # Fall is verified if EITHER posture is FALLING OR high impact detected
-        wearable_fall = ("FALLING" in str(latest_wear['posture_class']))
-        high_impact = (latest_wear['accel_magnitude'] > 2.2)
+        w_posture = str(latest_wear.get('posture_class', '')).upper()
+        wearable_fall = ("FALL" in w_posture)
+        high_impact = (latest_wear.get('accel_magnitude', 0) > 2.2)
         is_imu_impact = wearable_fall or high_impact
 
 
