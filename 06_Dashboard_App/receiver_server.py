@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import pandas as pd
 import requests
 import os
@@ -188,7 +188,7 @@ def upload_cam(data: CamTelemetry, db: Session = Depends(get_db)):
     ).first()
 
     verified_fall = False
-    if data.posture_class == "FALLING":
+    if posture == "FALLING":
         # Dual Verification Logic
         if recent_impact:
             verified_fall = True
@@ -250,7 +250,7 @@ def fusion_engine(device_id: str, posture: str, accel: float, vision: str, risk:
 
     if verified_fall and imu_spike:
         alert = "CRITICAL: VERIFIED FALL"
-        print(f"Received MPU Data: {data}")
+        print(f"Received Fusion Data: Device={device_id}, Posture={posture}, Accel={accel}, Vision={vision}")
         
         # Calculate Fatigue (using new logic)
         fatigue_val = 0.0
