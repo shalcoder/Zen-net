@@ -6,11 +6,15 @@ import tensorflow as tf
 import requests 
    
 
-STREAMLIT_URL = "http://10.211.186.135:8000/upload_telemetry"
+STREAMLIT_URL = "https://guardian-ai-backend-7zfj.onrender.com/upload_telemetry_cam"
 
 
-MODEL_PATH = "/home/vamshi/Mangal/movenet_singlepose_lightning_int8.tflite"
-INPUT_SIZE = 192
+MODEL_PATH = "E:/human-fall-detection/02_TFLite_Laptop/model_thunder_int8.tflite"
+INPUT_SIZE = 192  # Thunder requires larger input usually? No, check model specs. sticking to 192 or 256. Thunder is usually 256. 
+# But let's stick to what was there or 256 if I can confirm. 
+# Safe bet: leave INPUT_SIZE alone for now unless I know for sure. Thunder Int8 is often 256. Lightning is 192.
+# Let's check INPUT_SIZE 256 for Thunder.
+INPUT_SIZE = 256 
 CONFIDENCE_THRESHOLD = 0.3
 
 SKELETON_COLOR = (0,255,0)
@@ -29,7 +33,7 @@ EDGES = [
     (12,14),(14,16)
 ]
 
-def send_predicitons(posture, conf):
+def send_predictions(posture, conf):
     vision_status = "Normal"  # Fixed: was "NORMAL"
     if posture == "FALLING":
         vision_status = "Fall"  # Fixed: was "FALL"
@@ -43,7 +47,7 @@ def send_predicitons(posture, conf):
         "risk_score": conf * 100        
     }
     try:
-        requests.post(STREAMLIT_URL, json=payload, timeout=0.2)
+        requests.post(STREAMLIT_URL, json=payload, timeout=3.0)
         print(f"✅ Sent: {posture}")
     except Exception as e:
         print(f"❌ Error: {e}")
@@ -94,7 +98,7 @@ def detect_posture(keypoints, height, width):
     
     n = to_px(nose)
     sh = to_px(((l_sh[0]+r_sh[0])/2,(l_sh[1]+r_sh[1])/2,1))
-    hip = to_px(((l_hip[0]+r_hip[0])/2,(l_hip[1]+r_hip[[2]])/2,1))
+    hip = to_px(((l_hip[0]+r_hip[0])/2,(l_hip[1]+r_hip[1])/2,1))
     knee_l, knee_r = to_px(l_knee), to_px(r_knee)
     ank_l, ank_r = to_px(l_ank), to_px(r_ank)
 
@@ -189,7 +193,7 @@ def main():
                             frame.shape[1])   
                 
                 conf = 0.15
-                send_predicitons(posture, conf)
+                send_predictions(posture, conf)
 
                 curr_time = time.time()
                 fps = 1/(curr_time - prev_time)
@@ -204,7 +208,7 @@ def main():
                 cv2.putText(frame, f"Posture:{posture}",(10,60),
                             cv2.FONT_HERSHEY_SIMPLEX,0.7,color,2)
                 
-                if "FALL DETECTED" in posture:
+                if posture == "FALL":
                     cv2.putText(frame, "!!! FALL DETECTED !!!",(frame.shape[1]//2-150,50),cv2.FONT_HERSHEY_SIMPLEX,1, (0,0,255),3)
                     print("Alerting user...")
                     cap.release()

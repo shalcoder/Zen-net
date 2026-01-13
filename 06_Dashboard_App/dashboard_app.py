@@ -141,7 +141,7 @@ import requests
 @st.cache_data(ttl=2, show_spinner=False)
 def get_data():
     # Use your Render Backend URL
-    BACKEND_URL = "https://guardian-ai-backend-7zfj.onrender.com"
+    BACKEND_URL = "http://127.0.0.1:8000"
     
     try:
         response = requests.get(f"{BACKEND_URL}/get_telemetry?limit=200", timeout=5)

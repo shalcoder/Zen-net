@@ -10,13 +10,12 @@ from database.db_manager import SessionLocal, UserTelemetry, init_db
 from analytics.fatigue_logic import FatigueComputer
 
 # --- BLYNK CONFIGURATION ---
-BLYNK_TEMPLATE_ID = os.getenv("BLYNK_TEMPLATE_ID", "TMPL3Q_roROB9")
+BLYNK_TEMPLATE_ID = os.getenv("BLYNK_TEMPLATE_ID", "TMPL3VuBdayRd")
 BLYNK_TEMPLATE_NAME = os.getenv("BLYNK_TEMPLATE_NAME", "Elderly Care EdgeAI")
-BLYNK_AUTH_TOKEN = os.getenv("BLYNK_AUTH_TOKEN", "eGCQr0mI4f416sHgYr7b55TzdthN-Ru9")
+BLYNK_AUTH_TOKEN = os.getenv("BLYNK_AUTH_TOKEN", "qlnMKrmf8b0IimnF0QdEJyM6Hc1-CbyG")
 BLYNK_DEVICE_NAME = os.getenv("BLYNK_DEVICE_NAME", "ESPCAM_node")
 BLYNK_EVENT_CODE = os.getenv("BLYNK_EVENT_CODE", "fall_alert")
 
-# --- EMAIL CONFIGURATION (Gmail SMTP) ---
 import smtplib
 from email.mime.text import MIMEText
 
